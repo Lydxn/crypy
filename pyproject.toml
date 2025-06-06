@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crypy"
+version = "0.0.0"
+description = "Various crypto attacks/utilities for CTFs"
+dependencies = [
+    "pycryptodome",
+    "gmpy2"
+]
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+addopts = "-ra -q"
+testpaths = ["tests"]
