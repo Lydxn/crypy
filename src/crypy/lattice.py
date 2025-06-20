@@ -15,6 +15,7 @@ __all__ = [
     'cvp_babai',
     'cvp_kannan',
     'flatter',
+    'get_cvp_weights',
     'lll',
     'solve_lineq',
     'solve_lineq_poly',
@@ -250,6 +251,9 @@ def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, q=None):
     """Find an integer vector `x` that satisfies `M*x = t` and return the target vector
     `t`, where `t` is constrained by a list of bounds.
 
+    Note: The bounds are *soft*. LLL will try its best, but the returned vector may not
+    respect the bounds.
+
     Parameters:
         M: An integer matrix representing the lattice basis (as row vectors).
         bounds: A list of (lower_bound, upper_bound) pairs, which constrain the target
@@ -306,7 +310,7 @@ class CVPSolver:
     solve them efficiently using Babai's algorithm + precomputed LLL, since the overall
     basis doesn't change.
     """
-    def __init__(self, basis_or_spolys):
+    def __init__(self, basis_or_spolys, reduce=flatter):
         from sage.all import ZZ, matrix
 
         # The solver accepts either a matrix or a sequence of symbolic polynomials. If
@@ -316,8 +320,9 @@ class CVPSolver:
         except Exception:
             self.M = spolys_to_matrix(basis_or_spolys)
         self._weight_cache = {}
+        self.reduce = reduce
 
-    def solve(self, bounds, reduce=flatter):
+    def solve(self, bounds):
         from sage.all import ZZ, matrix, vector
 
         m = self.M.ncols()
@@ -328,21 +333,22 @@ class CVPSolver:
             B = matrix(ZZ, 2 * self.M)
             for i in range(m):
                 B[:, i] *= weights[i]
-            L = reduce(B)
+            L = self.reduce(B)
             G = L.gram_schmidt()[0]
-            self._weight_cache[deltas] = (L, G, weights)
+            C = [v / (v * v) for v in G]
+            self._weight_cache[deltas] = (L, C, weights)
         else:
-            L, G, weights = entry
+            L, C, weights = entry
 
         target = vector(ZZ, [(lb + ub) * w for (lb, ub), w in zip(bounds, weights)])
-        L = self._babai_step(L, G, target)
+        L = self._babai_step(L, C, target)
         for i in range(m):
             L[i] /= 2 * weights[i]
         return L
 
     @staticmethod
-    def _babai_step(L, G, target):
+    def _babai_step(L, C, target):
         diff = target
-        for i in range(G.nrows() - 1, -1, -1):
-            diff -= L[i] * ((diff * G[i]) / (G[i] * G[i])).round()
+        for i in range(len(C) - 1, -1, -1):
+            diff -= L[i] * (diff * C[i]).round()
         return target - diff
