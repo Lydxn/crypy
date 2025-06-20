@@ -4,6 +4,7 @@ from subprocess import check_output
 
 __all__ = [
     'BKZ',
+    'CVPSolver',
     'Flatter',
     'LLL',
     'SP',
@@ -17,6 +18,7 @@ __all__ = [
     'lll',
     'solve_lineq',
     'solve_lineq_poly',
+    'spolys_to_matrix',
 ]
 
 
@@ -60,6 +62,19 @@ class SymPoly:
     def __rsub__(self, other):
         return SymPoly(other - self.poly, self.modulus)
 
+    def __mul__(self, other):
+        if not isinstance(other, int):
+            raise ValueError('can only multiply SymPoly by an integer')
+        return SymPoly(other * self.poly, self.modulus)
+
+    __rmul__ = __mul__
+
+    def __pos__(self):
+        return SymPoly(self.poly, self.modulus)
+
+    def __neg__(self):
+        return SymPoly(-self.poly, self.modulus)
+
     def __repr__(self):
         return self.poly.__repr__()
 
@@ -73,21 +88,17 @@ class SymPolyConstraint:
         is_lhs_poly = isinstance(lhs, SP)
         is_rhs_poly = isinstance(rhs, SP)
         if is_lhs_poly and is_rhs_poly:
-            if lhs.modulus != rhs.modulus:
-                raise ValueError('incompatible modulus')
-            self.poly = (lhs - rhs).poly
+            self.poly = lhs - rhs
             self.lb = self.ub = 0
-            self.modulus = lhs.modulus
         elif not is_lhs_poly and not is_rhs_poly:
             raise ValueError('at least one argument must be of type SymPoly')
         else:
             if is_rhs_poly:
                 # always swap so that `lhs` is a SymPoly and `rhs` is not
                 lhs, rhs = rhs, lhs
-            self.modulus = lhs.modulus
             if isinstance(rhs, int):
                 c = lhs.poly.constant_coefficient()
-                self.poly = lhs.poly - c
+                self.poly = lhs - c
                 self.lb = self.ub = rhs + c
             elif isinstance(rhs, tuple) and len(rhs) == 2:
                 if not isinstance(rhs[0], int) or not isinstance(rhs[1], int):
@@ -95,7 +106,7 @@ class SymPolyConstraint:
                 if rhs[0] > rhs[1]:
                     raise ValueError('lower bound cannot be greater than upper bound')
                 c = lhs.poly.constant_coefficient()
-                self.poly = lhs.poly - c
+                self.poly = lhs - c
                 self.lb = rhs[0] + c
                 self.ub = rhs[1] + c
             else:
@@ -106,9 +117,10 @@ class SymPolyConstraint:
             s = f'{self.poly} == {self.lb}'
         else:
             s = f'{self.poly} == {self.lb}..{self.ub}'
-        if self.modulus is not None:
-            s += f' (mod {self.modulus})'
+        if self.poly.modulus is not None:
+            s += f' (mod {self.poly.modulus})'
         return s
+
 
 SP = SymPoly
 SPC = SymPolyConstraint
@@ -202,12 +214,41 @@ def cvp_babai(M, target, reduce=flatter):
         diff -= L[i] * ((diff * G[i]) / (G[i] * G[i])).round()
     return target - diff
 
-def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, q=None):
-    """Find an integer vector `x` that satisfies `M*x = t` and return `t`, where the
-    target vector `t` is constrained by a set of bounds.
+def spolys_to_matrix(spolys):
+    """Convert a sequence of symbolic polynomials to matrix form."""
+    from sage.all import Sequence, ZZ, matrix
 
-    Note: This function does not return `x`, but you can apply Kannan embedding on the
-    matrix to extract it.
+    polys, moduli = [], []
+    for sp in spolys:
+        polys.append(sp.poly)
+        moduli.append(sp.modulus)
+
+    M, _ = Sequence(polys).coefficients_monomials(sparse=False)
+    M = M.transpose()
+    n, m = M.dimensions()
+
+    mod_indices = [i for i in range(m) if moduli[i] is not None]
+    N = matrix(ZZ, len(mod_indices), m)
+    for i, j in enumerate(mod_indices):
+        N[i, j] = moduli[j]
+
+    return M.stack(N)
+
+def get_cvp_weights(M, bounds):
+    n, m = M.dimensions()
+
+    if any(lb > ub for lb, ub in bounds):
+        raise ValueError('bounds are invalid because lb > ub')
+    if len(bounds) != m:
+        raise ValueError('len(bounds) is not equal to number of columns in M')
+
+    deltas = [ub - lb for lb, ub in bounds]
+    scale = max(deltas)
+    return [scale // d if d != 0 else scale * n for d in deltas]
+
+def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, q=None):
+    """Find an integer vector `x` that satisfies `M*x = t` and return the target vector
+    `t`, where `t` is constrained by a list of bounds.
 
     Parameters:
         M: An integer matrix representing the lattice basis (as row vectors).
@@ -219,16 +260,9 @@ def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, q=None):
     """
     from sage.all import ZZ, matrix
 
-    n, m = M.dimensions()
-    if any(lb > ub for lb, ub in bounds):
-        raise ValueError('bounds are invalid because lb > ub')
-    if len(bounds) != m:
-        raise ValueError('len(bounds) is not equal to number of columns in M')
-
+    m = M.ncols()
     target = [lb + ub for lb, ub in bounds]
-    deltas = [ub - lb for lb, ub in bounds]
-    scale = max(deltas)
-    weights = [scale // d if d != 0 else scale * n for d in deltas]
+    weights = get_cvp_weights(M, bounds)
 
     B = matrix(ZZ, 2 * M)
     for i in range(m):
@@ -247,8 +281,6 @@ def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, q=None):
     return L
 
 def solve_lineq_poly(relations, algorithm='kannan', reduce=flatter, q=None):
-    from sage.all import Sequence, ZZ, matrix
-
     """Solve a system of integer linear inequalities using lattice reduction.
 
     Parameters:
@@ -257,20 +289,60 @@ def solve_lineq_poly(relations, algorithm='kannan', reduce=flatter, q=None):
         reduce (optional): The lattice reduction function, the default uses flatter.
         q: The embedding factor, only applies when the algorithm uses Kannan.
     """
-    polys, moduli, bounds = [], [], []
-    for r in relations:
-        polys.append(r.poly)
-        moduli.append(r.modulus)
-        bounds.append((r.lb, r.ub))
-
-    M, _ = Sequence(polys).coefficients_monomials(sparse=False)
-    M = M.transpose()
-    n, m = M.dimensions()
-
-    mod_indices = [i for i in range(m) if moduli[i] is not None]
-    N = matrix(ZZ, len(mod_indices), m)
-    for i, j in enumerate(mod_indices):
-        N[i, j] = moduli[j]
-
-    M = M.stack(N)
+    polys = [r.poly for r in relations]
+    bounds = [(r.lb, r.ub) for r in relations]
+    M = spolys_to_matrix(polys)
     return solve_lineq(M, bounds, algorithm=algorithm, reduce=reduce, q=q)
+
+
+class CVPSolver:
+    """Linear inequality solver for efficient target queries.
+
+    This class can be utilized to CVP solve queries with a fixed basis, but different
+    target vectors efficiently. It keeps track of a weight cache to avoid doing extra
+    lattice reductions whenever possible.
+
+    If the relative sizes of the bounds are constant across queries, then we can use
+    solve them efficiently using Babai's algorithm + precomputed LLL, since the overall
+    basis doesn't change.
+    """
+    def __init__(self, basis_or_spolys):
+        from sage.all import ZZ, matrix
+
+        # The solver accepts either a matrix or a sequence of symbolic polynomials. If
+        # it can't be cast to a Sage matrix then assume it is the latter...
+        try:
+            self.M = matrix(ZZ, basis_or_spolys)
+        except Exception:
+            self.M = spolys_to_matrix(basis_or_spolys)
+        self._weight_cache = {}
+
+    def solve(self, bounds, reduce=flatter):
+        from sage.all import ZZ, matrix, vector
+
+        m = self.M.ncols()
+        deltas = tuple(ub - lb for lb, ub in bounds)
+        entry = self._weight_cache.get(deltas)
+        if entry is None:
+            weights = get_cvp_weights(self.M, bounds)
+            B = matrix(ZZ, 2 * self.M)
+            for i in range(m):
+                B[:, i] *= weights[i]
+            L = reduce(B)
+            G = L.gram_schmidt()[0]
+            self._weight_cache[deltas] = (L, G, weights)
+        else:
+            L, G, weights = entry
+
+        target = vector(ZZ, [(lb + ub) * w for (lb, ub), w in zip(bounds, weights)])
+        L = self._babai_step(L, G, target)
+        for i in range(m):
+            L[i] /= 2 * weights[i]
+        return L
+
+    @staticmethod
+    def _babai_step(L, G, target):
+        diff = target
+        for i in range(G.nrows() - 1, -1, -1):
+            diff -= L[i] * ((diff * G[i]) / (G[i] * G[i])).round()
+        return target - diff
