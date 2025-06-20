@@ -1,7 +1,12 @@
 from Crypto.Util.number import bytes_to_long, long_to_bytes
+import base64
 
 __all__ = [
     'b2l',
+    'b64d',
+    'b64e',
+    'b64ud',
+    'b64ue',
     'l2b',
     'ci',
     'ci8',
@@ -80,3 +85,27 @@ ror8 = lambda x, n: ror(x, n, 8)
 ror16 = lambda x, n: ror(x, n, 16)
 ror32 = lambda x, n: ror(x, n, 32)
 ror64 = lambda x, n: ror(x, n, 64)
+
+def b64e(s):
+    """Encode a string in Base64."""
+    if isinstance(s, str):
+        s = s.encode()
+    return base64.b64encode(s).decode()
+
+def b64d(s):
+    """Decode a string in Base64."""
+    if isinstance(s, str):
+        s = s.encode()
+    return base64.b64decode(s + b'==')
+
+def b64ue(s):
+    """Encode a string in Base64Url."""
+    if isinstance(s, str):
+        s = s.encode()
+    return base64.urlsafe_b64encode(s).decode()
+
+def b64ud(s):
+    """Decode a string in Base64Url."""
+    if isinstance(s, str):
+        s = s.encode()
+    return base64.urlsafe_b64decode(s + b'==')

@@ -1,11 +1,27 @@
 from math import gcd, isqrt
+from shutil import which
+from subprocess import check_output
 from crypy.arith import iroot
 
 __all__ = [
+    'factor_cado',
     'fermat',
     'hastad',
     'rsadec',
 ]
+
+
+def factor_cado(n, log_level='info'):
+    """Factor an integer using CADO-NFS."""
+    if which('cado-nfs.py') is None:
+        raise FileNotFoundError(
+            "'cado-nfs.py' is not installed on your system. "
+            "Please install it from https://gitlab.inria.fr/cado-nfs/cado-nfs."
+        )
+
+    args = ['cado-nfs.py', str(n), '--screenlog', log_level]
+    output = check_output(args).decode().strip()
+    return tuple(map(int, output.split()))
 
 
 def fermat(n):

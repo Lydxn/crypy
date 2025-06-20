@@ -121,3 +121,51 @@ def test_rol(x, n, word_size, expected):
 ])
 def test_ror(x, n, word_size, expected):
     assert ror(x, n, word_size) == expected
+
+@pytest.mark.parametrize('s,expected', [
+    (b'', ''),
+    ('', ''),
+    (b'f', 'Zg=='),
+    (b'fo', 'Zm8='),
+    (b'foo', 'Zm9v'),
+    (b'\x00', 'AA=='),
+    (b'\xff\xfe\xfd', '//79'),
+    (b'\xfa\xfb\xfc\xfd\xfe\xff', '+vv8/f7/'),
+])
+def test_b64e(s, expected):
+    assert b64e(s) == expected
+
+@pytest.mark.parametrize('s,expected', [
+    (b'', b''),
+    ('', b''),
+    ('Zg==', b'f'),
+    ('Zm8=', b'fo'),
+    ('Zm9v', b'foo'),
+    ('AA==', b'\x00'),
+    ('AA=', b'\x00'),
+    ('AA', b'\x00'),
+    ('//79', b'\xff\xfe\xfd'),
+    ('+vv8/f7/', b'\xfa\xfb\xfc\xfd\xfe\xff'),
+])
+def test_b64d(s, expected):
+    assert b64d(s) == expected
+
+@pytest.mark.parametrize('s,expected', [
+    (b'', ''),
+    ('', ''),
+    (b'foo', 'Zm9v'),
+    (b'\xff\xfe\xfd', '__79'),
+    (b'\xfa\xfb\xfc\xfd\xfe\xff', '-vv8_f7_'),
+])
+def test_b64ue(s, expected):
+    assert b64ue(s) == expected
+
+@pytest.mark.parametrize('s,expected', [
+    (b'', b''),
+    ('', b''),
+    ('Zm9v', b'foo'),
+    ('__79', b'\xff\xfe\xfd'),
+    ('-vv8_f7_', b'\xfa\xfb\xfc\xfd\xfe\xff'),
+])
+def test_b64ud(s, expected):
+    assert b64ud(s) == expected

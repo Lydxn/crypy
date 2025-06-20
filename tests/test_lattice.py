@@ -1,23 +1,53 @@
-from random import getrandbits, randrange
+from sage.all import ZZ, matrix, random_matrix, random_vector
+from sage.modules.free_module_integer import IntegerLattice
+from secrets import randbits, randbelow
+import pytest
 from crypy.lattice import *
 
 
-def test_flatter():
-    # a*x + b*y = c (mod p)
-    p = getrandbits(128)
-    a, b = [randrange(p) for _ in range(2)]
-    x, y = [getrandbits(32) for _ in range(2)]
-    c = a * x + b * y
-    W = 2**128
-    M = [
-        [ a*W, 1, 0, 0],
-        [ b*W, 0, 1, 0],
-        [-c*W, 0, 0, W],
-        [ p*W, 0, 0, 0],
+@pytest.mark.parametrize('reduce', [flatter, lll, bkz])
+def test_reduce(reduce):
+    M = random_matrix(ZZ, 4, 4)
+    actual = next(row for row in reduce(M) if row != 0)
+    expected = IntegerLattice(M).shortest_vector()
+    assert abs(actual.norm() - expected.norm()) < 2
+
+@pytest.mark.parametrize('cvp', [cvp_kannan, cvp_babai])
+def test_cvp(cvp):
+    M = random_matrix(ZZ, 4, 4)
+    target = random_vector(ZZ, 4)
+    actual = cvp(M, target)
+    expected = IntegerLattice(M).approximate_closest_vector(target)
+    assert abs(actual.norm() - expected.norm()) < 2
+
+@pytest.mark.parametrize('algorithm', ['kannan', 'babai'])
+def test_solve_lineq(algorithm):
+    p = randbits(128)
+    a, b = randbelow(p), randbelow(p)
+    x, y = randbits(40), randbits(40)
+    c = (a * x + b * y) % p
+    M = matrix(ZZ, [
+        [a, 1, 0],
+        [b, 0, 1],
+        [p, 0, 0],
+    ])
+    bounds = [(c, c)] + [(0, 2**40)] * 2
+    sol = solve_lineq(M, bounds, algorithm=algorithm)
+    assert tuple(map(int, sol)) == (c, x, y)
+
+@pytest.mark.parametrize('algorithm', ['kannan', 'babai'])
+def test_solve_lineq_poly(algorithm):
+    from sage.all import polygen
+
+    p = randbits(128)
+    a, b = randbelow(p), randbelow(p)
+    x, y = randbits(40), randbits(40)
+    c = (a * x + b * y) % p
+    xx, yy = polygen(ZZ, 'xx, yy')
+    relations = [
+        SP(a * xx + b * yy) % p == c,
+        SP(xx) == (0, 2**40),
+        SP(yy) == (0, 2**40),
     ]
-    L = flatter(M)
-    sol = [row for row in L if row[0] == 0 and abs(row[-1]) == W][0]
-    if sol[-1] < 0:
-        sol *= -1
-    xx, yy = int(sol[1]) % p, int(sol[2]) % p
-    assert xx == x and yy == y
+    sol = solve_lineq_poly(relations, algorithm=algorithm)
+    assert tuple(map(int, sol)) == (c, x, y)

@@ -8,16 +8,16 @@ __all__ = [
 ]
 
 
-def dlog(g, h, p, debug='info', small_bound=2**64):
+def dlog(g, h, p, small_bound=2**64, log_level='info'):
     """Compute the discrete log in GF(p).
 
     Parameters:
         g: The base generator.
         h: One, or a sequence of target values of the exponentiation mod p.
         p: The prime modulus.
-        debug: The debug mode for CADO-NFS; one of 'warn', 'info', 'command' or 'debug'
-        (in increasing order of verbosity).
         small_bound: The maximum subgroup size at which to use the general algorithm.
+        log_level: The log level for CADO-NFS; one of 'warn', 'info', 'command' or
+        'debug' (in increasing order of verbosity).
     """
     from sage.all import crt, factor, prod
 
@@ -36,7 +36,7 @@ def dlog(g, h, p, debug='info', small_bound=2**64):
     if not ells:
         xs = [dlog_pari(g, h0, p, order, factors) for h0 in h]
     else:
-        results = [dlog_cado(g, h, p, ell, debug=debug) for ell in ells]
+        results = [dlog_cado(g, h, p, ell, log_level=log_level) for ell in ells]
         x_larges = [crt(result, ells) for result in map(list, zip(*results))]
         P = prod(ells)
         Q = order // P
@@ -49,7 +49,7 @@ def dlog(g, h, p, debug='info', small_bound=2**64):
     return xs if is_sequence else xs[0]
 
 
-def dlog_cado(g, h, p, ell, debug='info'):
+def dlog_cado(g, h, p, ell, log_level='info'):
     """Compute the discrete log in GF(p) using CADO-NFS.
 
     Parameters:
@@ -57,8 +57,8 @@ def dlog_cado(g, h, p, ell, debug='info'):
         h: One, or a sequence of target values of the exponentiation mod p.
         p: The prime modulus.
         ell: The subgroup order in which the discrete log is computed.
-        debug: The debug mode for CADO-NFS; one of 'warn', 'info', 'command' or 'debug'
-        (in increasing order of verbosity).
+        log_level: The log level for CADO-NFS; one of 'warn', 'info', 'command' or
+        'debug' (in increasing order of verbosity).
 
     The function solves the equation g^x = h (mod p) and returns x mod ell, where
     ell must be a prime factor of p-1. Only use this function if you want more
@@ -85,7 +85,7 @@ def dlog_cado(g, h, p, ell, debug='info'):
     targets = ','.join(map(str, [g, *h]))
     args = [
         'cado-nfs.py', '-dlp', '-ell', str(ell), f'target={targets}', str(p),
-        '--screenlog', debug,
+        '--screenlog', log_level,
     ]
     output = check_output(args).decode().strip()
     logg, *loghs = list(map(int, output.split(',')))
