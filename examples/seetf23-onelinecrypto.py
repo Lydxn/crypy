@@ -1,3 +1,6 @@
+"""
+Solve script for "onelinecrypto" from SeeTF 2023.
+"""
 from sage.all import *
 from crypy import *
 from itertools import product
@@ -19,8 +22,8 @@ for guess in map(bytes, product(alphabet, repeat=g)):
     s = sum(x * y for x, y in zip(guess, B[:g]))
     target = (-T - s) % mod
     bounds = [(target, target)] + [(48, 122)] * (l - g)
-    sol = cvp.solve(bounds)
-    if sol is None or sol[0] != target or not all(48 <= c <= 122 for c in sol[1:]):
+    sol = cvp.solve(bounds, check=True)
+    if sol is None:
         continue
     flag = guess + bytes(sol[1:])
     assert b2l(b'SEE{' + flag + b'}') % mod == 0

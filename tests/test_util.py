@@ -169,3 +169,14 @@ def test_b64ue(s, expected):
 ])
 def test_b64ud(s, expected):
     assert b64ud(s) == expected
+
+@pytest.mark.parametrize('args,expected', [
+    ((), b''),
+    (('a',), b'a'),
+    ((b'a',), b'a'),
+    ((b'a', b'b'), b'\x03'),
+    ((b'xxx', b'xyz'), b'\x00\x01\x02'),
+    ((b'abc', b'xyzabc', b'y'), b'`b`yyy'),
+])
+def test_xor(args, expected):
+    assert xor(*args) == expected

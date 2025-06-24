@@ -28,6 +28,7 @@ __all__ = [
     'ror16',
     'ror32',
     'ror64',
+    'xor',
 ]
 
 
@@ -109,3 +110,27 @@ def b64ud(s):
     if isinstance(s, str):
         s = s.encode()
     return base64.urlsafe_b64decode(s + b'==')
+
+def xor(*args):
+    """XOR multiple string or byte inputs cyclically.
+
+    The function takes any number of string or bytes-like arguments. The inputs are xor'ed
+    together exactly like xor() from pwntools.
+    """
+    if not args:
+        return b''
+    strs = []
+    for s in args:
+        if isinstance(s, str):
+            s = s.encode()
+        strs.append(bytes(s))
+    n = max(len(s) for s in strs)
+    xored = bytearray(n)
+    for s in strs:
+        j, m = 0, len(s)
+        for i in range(n):
+            xored[i] ^= s[j]
+            j += 1
+            if j == m:
+                j = 0
+    return bytes(xored)

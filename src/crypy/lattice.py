@@ -24,6 +24,20 @@ __all__ = [
 
 
 class SymPoly:
+    """Represents a linear symbolic polynomial over the integers.
+
+    This class is used to define symbolic expressions used in the linear inequality
+    solvers. Here are some examples of its usage:
+
+    >>> SP(3*x + 4*y)
+    3*x + 4*y
+    >>> 3*SP(x) + 4*SP(y)
+    3*x + 4*y
+    >>> SP(x*y)
+    ...
+    ValueError: polynomial is not linear
+    """
+
     def __init__(self, poly, modulus=None):
         from sage.all import ZZ
 
@@ -32,6 +46,9 @@ class SymPoly:
                 raise ValueError('modulus must be an integer')
             if modulus <= 0:
                 raise ValueError('modulus must be positive')
+
+        if poly.degree() > 1:
+            raise ValueError('polynomial is not linear')
 
         self.poly = poly.change_ring(ZZ)
         self.modulus = modulus
@@ -85,6 +102,23 @@ class SymPoly:
 
 
 class SymPolyConstraint:
+    """Represents a linear symbolic polynomial constraint.
+
+    This class is used to define symbolic constraints used in the linear inequality
+    solvers. Defining constraints can be done by applying `==` to a symbolic polynomial.
+
+    See examples below for how this works:
+
+    >>> SP(3*x + 4*y)
+    3*x + 4*y
+    >>> SP(3*x + 4*y) == 1
+    3*x + 4*y == 1
+    >>> SP(3*x + 4*y) % 6 == 1
+    3*x + 4*y == 1 (mod 6)
+    >>> SP(3*x + 4*y) % 6 == (3, 5)
+    3*x + 4*y == 3..5 (mod 6)
+    """
+
     def __init__(self, lhs, rhs):
         is_lhs_poly = isinstance(lhs, SP)
         is_rhs_poly = isinstance(rhs, SP)
@@ -100,7 +134,7 @@ class SymPolyConstraint:
             if isinstance(rhs, int):
                 c = lhs.poly.constant_coefficient()
                 self.poly = lhs - c
-                self.lb = self.ub = rhs + c
+                self.lb = self.ub = rhs - c
             elif isinstance(rhs, tuple) and len(rhs) == 2:
                 if not isinstance(rhs[0], int) or not isinstance(rhs[1], int):
                     raise ValueError('bound values must be integers')
@@ -108,8 +142,8 @@ class SymPolyConstraint:
                     raise ValueError('lower bound cannot be greater than upper bound')
                 c = lhs.poly.constant_coefficient()
                 self.poly = lhs - c
-                self.lb = rhs[0] + c
-                self.ub = rhs[1] + c
+                self.lb = rhs[0] - c
+                self.ub = rhs[1] - c
             else:
                 raise TypeError('left or right hand side is invalid')
 
@@ -247,7 +281,7 @@ def get_cvp_weights(M, bounds):
     scale = max(deltas)
     return [scale // d if d != 0 else scale * n for d in deltas]
 
-def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, q=None):
+def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, check=False, q=None):
     """Find an integer vector `x` that satisfies `M*x = t` and return the target vector
     `t`, where `t` is constrained by a list of bounds.
 
@@ -260,14 +294,16 @@ def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, q=None):
             vector `t`.
         algorithm (optional): The CVP algorithm used, either 'kannan' or 'babai'.
         reduce (optional): The lattice reduction function, the default uses flatter.
+        check (optional): Return None if the result is not within the bounds.
         q: The embedding factor, only applies when the algorithm uses Kannan.
     """
     from sage.all import ZZ, matrix
 
-    m = M.ncols()
+    bounds = [(b, b) if isinstance(b, int) else b for b in bounds]
     target = [lb + ub for lb, ub in bounds]
     weights = get_cvp_weights(M, bounds)
 
+    m = M.ncols()
     B = matrix(ZZ, 2 * M)
     for i in range(m):
         B[:, i] *= weights[i]
@@ -282,21 +318,25 @@ def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, q=None):
 
     for i in range(m):
         L[i] /= 2 * weights[i]
-    return L
 
-def solve_lineq_poly(relations, algorithm='kannan', reduce=flatter, q=None):
+    if not check or all(lb <= x <= ub for x, (lb, ub) in zip(L, bounds)):
+        return L
+    return None
+
+def solve_lineq_poly(relations, algorithm='kannan', reduce=flatter, check=False, q=None):
     """Solve a system of integer linear inequalities using lattice reduction.
 
     Parameters:
         relations: A sequence of SymPolyConstraint equations.
         algorithm (optional): The CVP algorithm used, either 'kannan' or 'babai'.
         reduce (optional): The lattice reduction function, the default uses flatter.
+        check (optional): Return None if the result is not within the bounds.
         q: The embedding factor, only applies when the algorithm uses Kannan.
     """
     polys = [r.poly for r in relations]
     bounds = [(r.lb, r.ub) for r in relations]
     M = spolys_to_matrix(polys)
-    return solve_lineq(M, bounds, algorithm=algorithm, reduce=reduce, q=q)
+    return solve_lineq(M, bounds, algorithm=algorithm, reduce=reduce, check=check, q=q)
 
 
 class CVPSolver:
@@ -322,7 +362,7 @@ class CVPSolver:
         self._weight_cache = {}
         self.reduce = reduce
 
-    def solve(self, bounds):
+    def solve(self, bounds, check=False):
         from sage.all import ZZ, matrix, vector
 
         m = self.M.ncols()
@@ -344,7 +384,10 @@ class CVPSolver:
         L = self._babai_step(L, C, target)
         for i in range(m):
             L[i] /= 2 * weights[i]
-        return L
+
+        if not check or all(lb <= x <= ub for x, (lb, ub) in zip(L, bounds)):
+            return L
+        return None
 
     @staticmethod
     def _babai_step(L, C, target):
