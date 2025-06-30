@@ -23,7 +23,7 @@ cvp = CVPSolver(M)
 T = b2l(b'SVUSCG{' + b'\x00' * l + b'}')
 for d in tqdm(product([1, -1], repeat=g)):
     ofs = sum(x * y for x, y in zip(roots[:g], d))
-    bounds = [(T - ofs, T - ofs)] + [(-1, 1)] * (k - g) + [(0, 256**l)]
+    bounds = [T - ofs] + [(-1, 1)] * (k - g) + [(0, 256**l)]
     sol = cvp.solve(bounds)
     flag = l2b(abs(sol[-1]))
     if flag.isascii():

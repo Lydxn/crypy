@@ -17,6 +17,7 @@ __all__ = [
     'flatter',
     'get_cvp_weights',
     'lll',
+    'ortho_lattice',
     'solve_lineq',
     'solve_lineq_poly',
     'spolys_to_matrix',
@@ -210,7 +211,9 @@ LLL = lambda *args, **kwargs: partial(lll, *args, **kwargs)
 BKZ = lambda block_size=10, /, *args, **kwargs: \
     partial(bkz, block_size=block_size, *args, **kwargs)
 
-def cvp_kannan(M, target, reduce=flatter, q=None):
+_default_reduce = flatter
+
+def cvp_kannan(M, target, reduce=_default_reduce, q=None):
     """Solve the closest vector problem using Kannan embedding.
 
     Parameters:
@@ -231,7 +234,7 @@ def cvp_kannan(M, target, reduce=flatter, q=None):
         if row[-1] == q:
             return row[:-1] + target
 
-def cvp_babai(M, target, reduce=flatter):
+def cvp_babai(M, target, reduce=_default_reduce):
     """Solve the closest vector problem using Babai's nearest plane algorithm.
 
     Parameters:
@@ -278,10 +281,10 @@ def get_cvp_weights(M, bounds):
         raise ValueError('len(bounds) is not equal to number of columns in M')
 
     deltas = [ub - lb for lb, ub in bounds]
-    scale = max(deltas)
+    scale = max(deltas) or M.det()
     return [scale // d if d != 0 else scale * n for d in deltas]
 
-def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, check=False, q=None):
+def solve_lineq(M, bounds, algorithm='kannan', reduce=_default_reduce, check=False, q=None):
     """Find an integer vector `x` that satisfies `M*x = t` and return the target vector
     `t`, where `t` is constrained by a list of bounds.
 
@@ -299,7 +302,7 @@ def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, check=False, q=No
     """
     from sage.all import ZZ, matrix
 
-    bounds = [(b, b) if isinstance(b, int) else b for b in bounds]
+    bounds = [b if isinstance(b, tuple) else (b, b) for b in bounds]
     target = [lb + ub for lb, ub in bounds]
     weights = get_cvp_weights(M, bounds)
 
@@ -323,7 +326,7 @@ def solve_lineq(M, bounds, algorithm='kannan', reduce=flatter, check=False, q=No
         return L
     return None
 
-def solve_lineq_poly(relations, algorithm='kannan', reduce=flatter, check=False, q=None):
+def solve_lineq_poly(relations, algorithm='kannan', reduce=_default_reduce, check=False, q=None):
     """Solve a system of integer linear inequalities using lattice reduction.
 
     Parameters:
@@ -338,6 +341,34 @@ def solve_lineq_poly(relations, algorithm='kannan', reduce=flatter, check=False,
     M = spolys_to_matrix(polys)
     return solve_lineq(M, bounds, algorithm=algorithm, reduce=reduce, check=check, q=q)
 
+def ortho_lattice(M, mod=None, reduce=_default_reduce):
+    """Compute a short orthogonal basis of the matrix.
+
+    For every row vector in the returned matrix `v`, the equation `M*v = 0` holds.
+
+    Parameters:
+        M: An integer matrix of column vectors.
+        mod (optional): The modulus over which the orthogonal lattice is computed.
+        reduce (optional): The lattice reduction function, the default uses flatter.
+    """
+    from sage.all import ZZ, block_matrix, diagonal_matrix, matrix
+
+    M = matrix(ZZ, M)
+    n, m = M.dimensions()
+    if mod is None:
+        w = max(max(M)) * 2**10
+        B = block_matrix(ZZ, [[M.T * w, 1]])
+    else:
+        w = mod
+        B = block_matrix(ZZ, [[M.T, 1], [mod, 0]])
+    W = diagonal_matrix(ZZ, [w] * n + [1] * m)
+    L = reduce(B * W) / W
+    vecs = []
+    for row in L:
+        if row[:n] == 0:
+            vecs.append(row[n:])
+    return matrix(ZZ, vecs)
+
 
 class CVPSolver:
     """Linear inequality solver for efficient target queries.
@@ -350,7 +381,7 @@ class CVPSolver:
     solve them efficiently using Babai's algorithm + precomputed LLL, since the overall
     basis doesn't change.
     """
-    def __init__(self, basis_or_spolys, reduce=flatter):
+    def __init__(self, basis_or_spolys, reduce=_default_reduce):
         from sage.all import ZZ, matrix
 
         # The solver accepts either a matrix or a sequence of symbolic polynomials. If
@@ -366,6 +397,7 @@ class CVPSolver:
         from sage.all import ZZ, matrix, vector
 
         m = self.M.ncols()
+        bounds = [b if isinstance(b, tuple) else (b, b) for b in bounds]
         deltas = tuple(ub - lb for lb, ub in bounds)
         entry = self._weight_cache.get(deltas)
         if entry is None:

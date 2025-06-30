@@ -1,3 +1,4 @@
+from Crypto.Util.Padding import pad as _pad
 from Crypto.Util.number import bytes_to_long, long_to_bytes
 import base64
 
@@ -7,6 +8,7 @@ __all__ = [
     'b64e',
     'b64ud',
     'b64ue',
+    'brev',
     'l2b',
     'ci',
     'ci8',
@@ -18,6 +20,7 @@ __all__ = [
     'cu16',
     'cu32',
     'cu64',
+    'pad',
     'rol',
     'rol8',
     'rol16',
@@ -29,6 +32,8 @@ __all__ = [
     'ror32',
     'ror64',
     'xor',
+    'xork',
+    'zpad',
 ]
 
 
@@ -45,6 +50,22 @@ def l2b(l):
     Convert a positive integer to a byte string (big endian).
     """
     return long_to_bytes(l)
+
+def pad(data, block_size):
+    """Alias of `Crypto.Util.Padding.pad`.
+
+    Apply PKCS #7 padding to a byte string up to a multiple of `block_size`.
+    """
+    return _pad(data, block_size)
+
+def zpad(data, block_size):
+    """Pad a byte string with null bytes to the next multiple of `block_size`."""
+    return data + b'\x00' * (-len(data) % block_size)
+
+def brev(x, word_size):
+    """Compute the bit reversal of an integer `x` with `word_size` bits."""
+    x &= ((1 << word_size) - 1)
+    return int(f'{x:0{word_size}b}'[::-1], 2)
 
 def ci(x, word_size):
     """Cast `x` to an signed integer of `word_size` bits."""
@@ -112,10 +133,24 @@ def b64ud(s):
     return base64.urlsafe_b64decode(s + b'==')
 
 def xor(*args):
+    """XOR multiple string or byte inputs, truncated to the length of the shortest string.
+
+    Analagous to pwntools' xor(..., cut='min').
+    """
+    return _xor_generic(args, lambda strs: min(len(s) for s in strs))
+
+def xork(*args):
     """XOR multiple string or byte inputs cyclically.
 
-    The function takes any number of string or bytes-like arguments. The inputs are xor'ed
-    together exactly like xor() from pwntools.
+    Analagous to pwntools' xor(..., cut='max').
+    """
+    return _xor_generic(args, lambda strs: max(len(s) for s in strs))
+
+def _xor_generic(args, cut_func):
+    """XOR multiple string or byte inputs.
+
+    The function takes any number of string or bytes-like arguments. Each string is
+    cyclically padded to the length returned by `cut_func`.
     """
     if not args:
         return b''
@@ -124,7 +159,7 @@ def xor(*args):
         if isinstance(s, str):
             s = s.encode()
         strs.append(bytes(s))
-    n = max(len(s) for s in strs)
+    n = cut_func(strs)
     xored = bytearray(n)
     for s in strs:
         j, m = 0, len(s)

@@ -21,7 +21,7 @@ cvp = CVPSolver(M, reduce=BKZ(45))
 for guess in map(bytes, product(alphabet, repeat=g)):
     s = sum(x * y for x, y in zip(guess, B[:g]))
     target = (-T - s) % mod
-    bounds = [(target, target)] + [(48, 122)] * (l - g)
+    bounds = [target] + [(48, 122)] * (l - g)
     sol = cvp.solve(bounds, check=True)
     if sol is None:
         continue

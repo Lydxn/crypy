@@ -14,6 +14,38 @@ def test_l2b():
     assert l2b(0x402) == b'\x04\x02'
     assert l2b(0x1337) == b'\x13\x37'
 
+def test_pad():
+    assert pad(b'', 16) == b'\x10' * 16
+    assert pad(b'a', 16) == b'a' + b'\x0f' * 15
+    assert pad(b'abc', 16) == b'abc' + b'\x0d' * 13
+    assert pad(b'abcdefg', 16) == b'abcdefg' + b'\x09' * 9
+    assert pad(b'x' * 16, 16) == b'x' * 16 + b'\x10' * 16
+    assert pad(b'abcd', 8) == b'abcd\x04\x04\x04\x04'
+    assert pad(b'abcdefg', 8) == b'abcdefg\x01'
+
+def test_zpad():
+    assert zpad(b'', 16) == b''
+    assert zpad(b'a', 16) == b'a' + b'\x00' * 15
+    assert zpad(b'abc', 16) == b'abc' + b'\x00' * 13
+    assert zpad(b'abcdefg', 16) == b'abcdefg' + b'\x00' * 9
+    assert zpad(b'x' * 16, 16) == b'x' * 16
+    assert zpad(b'abcd', 8) == b'abcd\x00\x00\x00\x00'
+    assert zpad(b'abcdefg', 8) == b'abcdefg\x00'
+
+@pytest.mark.parametrize('x,word_size,expected', [
+    (0, 1, 0),
+    (0b1000, 4, 0b0001),
+    (0b0101, 4, 0b1010),
+    (0b11110000, 4, 0b0000),
+    (0b11110001, 4, 0b1000),
+    (0b101100, 6, 0b001101),
+    (0b10001010, 8, 0b01010001),
+    (0b01110111, 8, 0b11101110),
+    (0b11111111, 8, 0b11111111),
+])
+def test_brev(x, word_size, expected):
+    assert brev(x, word_size) == expected
+
 @pytest.mark.parametrize('x,word_size,expected', [
     # 4-bit cast
     (0, 4, 0),
@@ -175,8 +207,19 @@ def test_b64ud(s, expected):
     (('a',), b'a'),
     ((b'a',), b'a'),
     ((b'a', b'b'), b'\x03'),
-    ((b'xxx', b'xyz'), b'\x00\x01\x02'),
-    ((b'abc', b'xyzabc', b'y'), b'`b`yyy'),
+    ((b'xxx', b'xyzz'), b'\x00\x01\x02'),
+    ((b'abc', b'xyzabc', b'y'), b'`'),
 ])
 def test_xor(args, expected):
     assert xor(*args) == expected
+
+@pytest.mark.parametrize('args,expected', [
+    ((), b''),
+    (('a',), b'a'),
+    ((b'a',), b'a'),
+    ((b'a', b'b'), b'\x03'),
+    ((b'xxx', b'xyzz'), b'\x00\x01\x02\x02'),
+    ((b'abc', b'xyzabc', b'y'), b'`b`yyy'),
+])
+def test_xork(args, expected):
+    assert xork(*args) == expected
