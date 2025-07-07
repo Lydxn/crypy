@@ -13,6 +13,7 @@ def test_l2b():
     assert l2b(0) == b'\x00'
     assert l2b(0x402) == b'\x04\x02'
     assert l2b(0x1337) == b'\x13\x37'
+    assert l2b(0x1337, 4) == b'\x00\x00\x13\x37'
 
 def test_pad():
     assert pad(b'', 16) == b'\x10' * 16
@@ -22,6 +23,15 @@ def test_pad():
     assert pad(b'x' * 16, 16) == b'x' * 16 + b'\x10' * 16
     assert pad(b'abcd', 8) == b'abcd\x04\x04\x04\x04'
     assert pad(b'abcdefg', 8) == b'abcdefg\x01'
+
+def test_unpad():
+    assert unpad(b'\x10' * 16, 16) == b''
+    assert unpad(b'a' + b'\x0f' * 15, 16) == b'a'
+    assert unpad(b'abc' + b'\x0d' * 13, 16) == b'abc'
+    assert unpad(b'abcdefg' + b'\x09' * 9, 16) == b'abcdefg'
+    assert unpad(b'x' * 16 + b'\x10' * 16, 16) == b'x' * 16
+    assert unpad(b'abcd\x04\x04\x04\x04', 8) == b'abcd'
+    assert unpad(b'abcdefg\x01', 8) == b'abcdefg'
 
 def test_zpad():
     assert zpad(b'', 16) == b''

@@ -1,4 +1,4 @@
-from Crypto.Util.Padding import pad as _pad
+from Crypto.Util.Padding import pad as _pad, unpad as _unpad
 from Crypto.Util.number import bytes_to_long, long_to_bytes
 import base64
 
@@ -31,6 +31,7 @@ __all__ = [
     'ror16',
     'ror32',
     'ror64',
+    'unpad',
     'xor',
     'xork',
     'zpad',
@@ -44,12 +45,12 @@ def b2l(b):
     """
     return bytes_to_long(b)
 
-def l2b(l):
+def l2b(l, blocksize=0):
     """Alias of `Crypto.Util.number.long_to_bytes`.
 
     Convert a positive integer to a byte string (big endian).
     """
-    return long_to_bytes(l)
+    return long_to_bytes(l, blocksize)
 
 def pad(data, block_size):
     """Alias of `Crypto.Util.Padding.pad`.
@@ -57,6 +58,14 @@ def pad(data, block_size):
     Apply PKCS #7 padding to a byte string up to a multiple of `block_size`.
     """
     return _pad(data, block_size)
+
+def unpad(data, block_size):
+    """Alias of `Crypto.Util.Padding.unpad`.
+
+    Remove PKCS #7 padding from a byte string. The input length must be a multiple of
+    `block_size`.
+    """
+    return _unpad(data, block_size)
 
 def zpad(data, block_size):
     """Pad a byte string with null bytes to the next multiple of `block_size`."""
