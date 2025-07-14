@@ -121,40 +121,34 @@ class SymPolyConstraint:
     """
 
     def __init__(self, lhs, rhs):
-        is_lhs_poly = isinstance(lhs, SP)
-        is_rhs_poly = isinstance(rhs, SP)
-        if is_lhs_poly and is_rhs_poly:
-            self.poly = lhs - rhs
-            self.lb = self.ub = 0
-        elif not is_lhs_poly and not is_rhs_poly:
+        # Swap so that `lhs` is a SymPoly and `rhs` is a constant/range term
+        if isinstance(rhs, SP):
+            lhs, rhs = rhs, lhs
+        if isinstance(rhs, SP):
+            raise ValueError('right-hand side must be a constant term (int or tuple)')
+        if not isinstance(lhs, SP):
             raise ValueError('at least one argument must be of type SymPoly')
+
+        self.spoly = lhs
+        if isinstance(rhs, int):
+            self.lb = self.ub = rhs
+        elif isinstance(rhs, tuple) and len(rhs) == 2:
+            if not isinstance(rhs[0], int) or not isinstance(rhs[1], int):
+                raise ValueError('bound values must be integers')
+            if rhs[0] > rhs[1]:
+                raise ValueError('lower bound cannot be greater than upper bound')
+            self.spoly = lhs
+            self.lb, self.ub = rhs
         else:
-            if is_rhs_poly:
-                # always swap so that `lhs` is a SymPoly and `rhs` is not
-                lhs, rhs = rhs, lhs
-            if isinstance(rhs, int):
-                c = lhs.poly.constant_coefficient()
-                self.poly = lhs - c
-                self.lb = self.ub = rhs - c
-            elif isinstance(rhs, tuple) and len(rhs) == 2:
-                if not isinstance(rhs[0], int) or not isinstance(rhs[1], int):
-                    raise ValueError('bound values must be integers')
-                if rhs[0] > rhs[1]:
-                    raise ValueError('lower bound cannot be greater than upper bound')
-                c = lhs.poly.constant_coefficient()
-                self.poly = lhs - c
-                self.lb = rhs[0] - c
-                self.ub = rhs[1] - c
-            else:
-                raise TypeError('left or right hand side is invalid')
+            raise TypeError('left or right hand side is invalid')
 
     def __repr__(self):
         if self.lb == self.ub:
-            s = f'{self.poly} == {self.lb}'
+            s = f'{self.spoly} == {self.lb}'
         else:
-            s = f'{self.poly} == {self.lb}..{self.ub}'
-        if self.poly.modulus is not None:
-            s += f' (mod {self.poly.modulus})'
+            s = f'{self.spoly} == {self.lb}..{self.ub}'
+        if self.spoly.modulus is not None:
+            s += f' (mod {self.spoly.modulus})'
         return s
 
 
@@ -253,24 +247,39 @@ def cvp_babai(M, target, reduce=_default_reduce):
     return target - diff
 
 def spolys_to_matrix(spolys):
-    """Convert a sequence of symbolic polynomials to matrix form."""
-    from sage.all import Sequence, ZZ, matrix
+    """Transform a sequence of symbolic polynomials to a matrix of monomial coefficients
+    and a vector of constant coefficients.
+
+    If a polynomial has a modulus, a "dummy" row is added to represent `x (mod p)` as
+    `x - dummy*p`. This is helpful in constructing lattice attacks.
+
+    The function returns a tuple (A, c), representing the coefficient matrix and vector,
+    respectively.
+    """
+    from sage.all import Sequence, ZZ, matrix, vector
 
     polys, moduli = [], []
     for sp in spolys:
         polys.append(sp.poly)
         moduli.append(sp.modulus)
 
-    M, _ = Sequence(polys).coefficients_monomials(sparse=False)
-    M = M.transpose()
-    n, m = M.dimensions()
+    # `.coefficients_monomials()` does not exist for univariate polynomials
+    if polys[0].parent().ngens() == 1:
+        M = matrix(ZZ, [poly.list()[::-1] for poly in polys])
+    else:
+        M, v = Sequence(polys).coefficients_monomials(sparse=False)
+        if v[-1] != 1:
+            M = M.augment(vector(ZZ, M.nrows()))
+    A, c = M[:, :-1], M.column(-1)
+    A = A.transpose()
+    n, m = A.dimensions()
 
     mod_indices = [i for i in range(m) if moduli[i] is not None]
     N = matrix(ZZ, len(mod_indices), m)
     for i, j in enumerate(mod_indices):
         N[i, j] = moduli[j]
 
-    return M.stack(N)
+    return A.stack(N), c
 
 def get_cvp_weights(M, bounds):
     n, m = M.dimensions()
@@ -336,10 +345,11 @@ def solve_lineq_poly(relations, algorithm='kannan', reduce=_default_reduce, chec
         check (optional): Return None if the result is not within the bounds.
         q: The embedding factor, only applies when the algorithm uses Kannan.
     """
-    polys = [r.poly for r in relations]
-    bounds = [(r.lb, r.ub) for r in relations]
-    M = spolys_to_matrix(polys)
-    return solve_lineq(M, bounds, algorithm=algorithm, reduce=reduce, check=check, q=q)
+    spolys = [r.spoly for r in relations]
+    A, cs = spolys_to_matrix(spolys)
+    bounds = [(r.lb - c, r.ub - c) for r, c in zip(relations, cs)]
+    sol = solve_lineq(A, bounds, algorithm=algorithm, reduce=reduce, check=check, q=q)
+    return sol + cs
 
 def ortho_lattice(M, mod=None, reduce=_default_reduce):
     """Compute a short orthogonal basis of the matrix.
