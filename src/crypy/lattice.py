@@ -192,11 +192,11 @@ def flatter(M, alpha=None, rhf=None, delta=None):
 
 def lll(M, *args, **kwargs):
     """Perform lattice basis reduction using the LLL algorithm."""
-    return M.LLL(*args, **kwargs)
+    return M.dense_matrix().LLL(*args, **kwargs)
 
 def bkz(M, *args, **kwargs):
     """Perform lattice basis reduction using the BKZ algorithm."""
-    return M.BKZ(*args, **kwargs)
+    return M.dense_matrix().BKZ(*args, **kwargs)
 
 # convenience funcs for the reduce parameter in solve_lineq() -- for example you can do
 # `solve_lineq(..., reduce=BKZ(20))` instead of `reduce=lambda x: x.BKZ(block_size=20)`.
