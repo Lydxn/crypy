@@ -3,13 +3,12 @@ from Crypto.Util.number import bytes_to_long, long_to_bytes
 import base64
 
 __all__ = [
-    'b2l',
+    'b2i',
     'b64d',
     'b64e',
     'b64ud',
     'b64ue',
     'brev',
-    'l2b',
     'ci',
     'ci8',
     'ci16',
@@ -20,6 +19,7 @@ __all__ = [
     'cu16',
     'cu32',
     'cu64',
+    'i2b',
     'pad',
     'rol',
     'rol8',
@@ -38,19 +38,19 @@ __all__ = [
 ]
 
 
-def b2l(b):
+def b2i(b):
     """Alias of `Crypto.Util.number.bytes_to_long`.
 
     Convert a byte string to a long integer (big endian).
     """
     return bytes_to_long(b)
 
-def l2b(l, blocksize=0):
+def i2b(n, blocksize=0):
     """Alias of `Crypto.Util.number.long_to_bytes`.
 
     Convert a positive integer to a byte string (big endian).
     """
-    return long_to_bytes(l, blocksize)
+    return long_to_bytes(n, blocksize)
 
 def pad(data, block_size):
     """Alias of `Crypto.Util.Padding.pad`.

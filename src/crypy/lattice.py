@@ -354,7 +354,7 @@ def solve_lineq_poly(relations, algorithm='kannan', reduce=_default_reduce, chec
 def ortho_lattice(M, mod=None, reduce=_default_reduce):
     """Compute a short orthogonal basis of the matrix.
 
-    For every row vector in the returned matrix `v`, the equation `M*v = 0` holds.
+    For every row vector in the returned matrix `B`, the equation `M*B = 0` holds.
 
     Parameters:
         M: An integer matrix of column vectors.
@@ -367,17 +367,17 @@ def ortho_lattice(M, mod=None, reduce=_default_reduce):
     n, m = M.dimensions()
     if mod is None:
         w = max(max(M)) * 2**10
-        B = block_matrix(ZZ, [[M.T * w, 1]])
+        B = block_matrix(ZZ, [[M.T, 1]])
     else:
         w = mod
         B = block_matrix(ZZ, [[M.T, 1], [mod, 0]])
     W = diagonal_matrix(ZZ, [w] * n + [1] * m)
     L = reduce(B * W) / W
-    vecs = []
+    B = []
     for row in L:
         if row[:n] == 0:
-            vecs.append(row[n:])
-    return matrix(ZZ, vecs)
+            B.append(row[n:])
+    return matrix(ZZ, B)
 
 
 class CVPSolver:

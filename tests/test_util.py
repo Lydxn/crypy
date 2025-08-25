@@ -2,18 +2,18 @@ import pytest
 from crypy.util import *
 
 
-def test_b2l():
-    assert b2l(b'') == 0
-    assert b2l(b'\x00\x00\x04\x02') == 0x402
-    assert b2l(b'\x13\x37') == 0x1337
+def test_b2i():
+    assert b2i(b'') == 0
+    assert b2i(b'\x00\x00\x04\x02') == 0x402
+    assert b2i(b'\x13\x37') == 0x1337
 
-def test_l2b():
+def test_i2b():
     with pytest.raises(ValueError):
-        l2b(-1)
-    assert l2b(0) == b'\x00'
-    assert l2b(0x402) == b'\x04\x02'
-    assert l2b(0x1337) == b'\x13\x37'
-    assert l2b(0x1337, 4) == b'\x00\x00\x13\x37'
+        i2b(-1)
+    assert i2b(0) == b'\x00'
+    assert i2b(0x402) == b'\x04\x02'
+    assert i2b(0x1337) == b'\x13\x37'
+    assert i2b(0x1337, 4) == b'\x00\x00\x13\x37'
 
 def test_pad():
     assert pad(b'', 16) == b'\x10' * 16

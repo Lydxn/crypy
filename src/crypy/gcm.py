@@ -1,13 +1,13 @@
-from crypy.util import b2l, brev, l2b, zpad
+from crypy.util import b2i, brev, i2b, zpad
 
 __all__ = [
     'b2gcm',
     'gcm2b',
-    'gcm2l',
+    'gcm2i',
     'gcm_unpack',
     'gfield',
     'gobj',
-    'l2gcm',
+    'i2gcm',
 ]
 
 
@@ -41,11 +41,11 @@ def gcm2b(g):
     """Convert an element of the AES-GCM field to a byte string."""
     return l2b(gcm2l(g))
 
-def l2gcm(l):
+def i2gcm(n):
     """Convert a 128-bit integer to an element of the AES-GCM field."""
-    return gfield().from_integer(brev(l, 128))
+    return gfield().from_integer(brev(n, 128))
 
-def gcm2l(g):
+def gcm2i(g):
     """Convert an element of the AES-GCM field to a 128-bit integer."""
     return brev(g.to_integer(), 128)
 
