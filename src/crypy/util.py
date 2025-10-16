@@ -1,6 +1,7 @@
 from Crypto.Util.Padding import pad as _pad, unpad as _unpad
 from Crypto.Util.number import bytes_to_long, long_to_bytes
 import base64
+import struct
 
 __all__ = [
     'b2i',
@@ -31,6 +32,16 @@ __all__ = [
     'ror16',
     'ror32',
     'ror64',
+    'u8',
+    'u16',
+    'u32',
+    'u64',
+    'u8s',
+    'u16s',
+    'u32s',
+    'u64s',
+    'unpack',
+    'unpacks',
     'unpad',
     'xor',
     'xork',
@@ -86,18 +97,39 @@ def cu(x, word_size):
     return x & ((1 << word_size) - 1)
 
 def rol(x, n, word_size):
-    """Rotate `x` to the left by `n` bits"""
+    """Rotate `x` to the left by `n` bits."""
     mask = (1 << word_size) - 1
     n %= word_size
     x &= mask
     return (x << n | x >> (word_size - n)) & mask
 
 def ror(x, n, word_size):
-    """Rotate `x` to the right by `n` bits"""
+    """Rotate `x` to the right by `n` bits."""
     mask = (1 << word_size) - 1
     n %= word_size
     x &= mask
     return (x >> n | x << (word_size - n)) & mask
+
+def unpack(s, word_size, endian='little', *, signed=False):
+    """Unpack a byte string `s` to a single integer of `word_size` bits."""
+    if word_size % 8 != 0:
+        raise ValueError('`word_size` must be a multiple of 8')
+    if len(s) != word_size // 8:
+        raise ValueError('byte string has incorrect length')
+    return int.from_bytes(s, endian, signed=signed)
+
+def unpacks(s, word_size, endian='little', *, signed=False):
+    """Unpack a byte string `s` to multiple integers of `word_size` bits."""
+    if word_size % 8 != 0:
+        raise ValueError('`word_size` must be a multiple of 8')
+    num_bytes = word_size // 8
+    length = len(s)
+    s += b'\x00' * (-length % num_bytes)
+    num_bytes = word_size // 8
+    return [
+        int.from_bytes(s[i:i+num_bytes], endian, signed=signed)
+        for i in range(0, length, num_bytes)
+    ]
 
 # These are 8-, 16-, 32- and 64-bit versions of some routines
 ci8 = lambda x: ci(x, 8)
@@ -116,6 +148,14 @@ ror8 = lambda x, n: ror(x, n, 8)
 ror16 = lambda x, n: ror(x, n, 16)
 ror32 = lambda x, n: ror(x, n, 32)
 ror64 = lambda x, n: ror(x, n, 64)
+u8 = lambda s, *args, **kwargs: unpack(s, 8, *args, **kwargs)
+u16 = lambda s, *args, **kwargs: unpack(s, 16, *args, **kwargs)
+u32 = lambda s, *args, **kwargs: unpack(s, 32, *args, **kwargs)
+u64 = lambda s, *args, **kwargs: unpack(s, 64, *args, **kwargs)
+u8s = lambda s, *args, **kwargs: unpacks(s, 8, *args, **kwargs)
+u16s = lambda s, *args, **kwargs: unpacks(s, 16, *args, **kwargs)
+u32s = lambda s, *args, **kwargs: unpacks(s, 32, *args, **kwargs)
+u64s = lambda s, *args, **kwargs: unpacks(s, 64, *args, **kwargs)
 
 def b64e(s):
     """Encode a string in Base64."""

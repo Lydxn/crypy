@@ -164,6 +164,40 @@ def test_rol(x, n, word_size, expected):
 def test_ror(x, n, word_size, expected):
     assert ror(x, n, word_size) == expected
 
+@pytest.mark.parametrize('s,word_size,endian,signed,expected', [
+    (b'\x01', 8, 'little', False, 1),
+    (b'\xff', 8, 'little', False, 255),
+    (b'\xff', 8, 'little', True, -1),
+    (b'\x01\x00', 16, 'little', False, 1),
+    (b'\x00\x01', 16, 'big', False, 1),
+    (b'\xff\xff', 16, 'little', True, -1),
+    (b'\x12\x34', 16, 'big', False, 0x1234),
+    (b'\x78\x56\x34\x12', 32, 'little', False, 0x12345678),
+    (b'\x12\x34\x56\x78', 32, 'big', False, 0x12345678),
+])
+def test_unpack(s, word_size, endian, signed, expected):
+    assert unpack(s, word_size, endian, signed=signed) == expected
+
+@pytest.mark.parametrize('s,word_size,endian,signed,expected', [
+    (b'\x01\x02\x03', 8, 'little', False, [1, 2, 3]),
+    (b'\xff\xfe\xfd', 8, 'little', True, [-1, -2, -3]),
+    (b'\x01\x00\x02\x00', 16, 'little', False, [1, 2]),
+    (b'\x00\x01\x00\x02', 16, 'big', False, [1, 2]),
+    (b'\xff\xff\x00\x01', 16, 'little', True, [-1, 256]),
+    (b'\x12\x34\x56\x78', 16, 'big', False, [0x1234, 0x5678]),
+    (b'\x01\x02\x03\x04\x05', 16, 'little', False, [0x0201, 0x0403, 0x05]),
+])
+def test_unpacks(s, word_size, endian, signed, expected):
+    assert unpacks(s, word_size, endian, signed=signed) == expected
+
+def test_unpack_invalid():
+    with pytest.raises(ValueError):
+        unpack(b'\x00', 12)
+    with pytest.raises(ValueError):
+        unpack(b'\x00\x01', 8)
+    with pytest.raises(ValueError):
+        unpacks(b'\x00', 12)
+
 @pytest.mark.parametrize('s,expected', [
     (b'', ''),
     ('', ''),
